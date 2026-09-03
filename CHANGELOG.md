@@ -5,7 +5,51 @@
 <!-- markdownlint-disable MD041 -->
 # ChangeLog
 
-# 2026/03/26 v1.0.0
+## [v2.3.0] - 2026-09-04
+
+本版本全面增强了插件的视奸功能，完成上游最新版本适配 by @DBJD-CR in #8
+
+## 🚀 What's Changed
+
+### ✨ New Features (新功能)
+
+- 新增视奸历史查询命令 `/视奸时间线`，展示各应用使用时长和历史活动情况
+- 新增健康数据查询命令 `/视奸健康`，展示心率/步数/睡眠等
+- 新增好友面板查询命令 `/视奸好友`，现在还能联动其他人的视奸面板！
+- 新增读侧 NSFW 兜底过滤，对服务端可能残留的敏感标题追加打码。
+- 新增 `/视奸服务状态` 命令，展示 Live DashBoard 服务连通性与运行时长
+- 好友面板支持子命令：`/视奸好友 <名称> 时间线 [日期]` / `<名称> 健康 [日期]` / `<名称> 配置`，经只读代理查询对应端点。
+- 新增多项配置并重构了配置文件结构
+- 拓展了 LLM Tools 能力
+
+### 🐛 Bug Fixes (修复)
+
+- 修复 `display_title` 与歌名/应用名重复展示、离线设备展示残留电量/音乐的问题（与上游前端行为对齐）。
+
+### ♻️ Refactor (重构)
+
+- 状态文案全面改用服务端权威 `status_text`，移除本地复刻层；`display_title` 直接采用服务端按隐私分级净化的结果。
+- 配置文件重构为七大分组：`🌐 连接配置` `📟 输出范围配置` `🛡️ 访问控制与隐私安全` `🧩 输出字段开关` `⚡ 缓存配置` `🛠️ 命令与功能开关` `📊 匿名遥测配置`，配置阅读顺序更清晰。
+- 新增统一请求客户端层：封装只读 API、自定义异常体系（鉴权/超时/网络/格式）。
+- 新增服务层共享基类：统一客户端生命周期管理。
+- 移除已废弃的 `services/payload_client.py` 与 `services/app_descriptions.py`。
+
+### 📚 Documentation (文档)
+
+- 更新适用于 v2.3.0 的 README 文档、贡献指南和更新日志 by @DBJD-CR in #8
+
+### 🔧 Chore (杂项)
+
+- 更新 GitHub Actions 版本 by @dependabot[bot] in #7
+
+---
+
+**Full Changelog**: https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/compare/v1.0.0...v2.3.0
+
+<details>
+<summary>点击查看历史更新内容</summary>
+
+## [v1.0.0] - 2026-03-26
 
 首个发行版，基础功能已可用。
 by @DBJD-CR & @openai-codex[bot] & @roomote & @gemini-code-assist[bot] & @sourcery-ai[bot] & @kilo-code-bot [bot] in #1
@@ -63,12 +107,5 @@ by @DBJD-CR & @openai-codex[bot] & @roomote & @gemini-code-assist[bot] & @source
 - @gemini-code-assist[bot] made their first contribution in #1
 - @sourcery-ai[bot] made their first contribution in #1
 - @kilo-code-bot [bot] made their first contribution in #1
-
----
-
-<details>
-<summary>点击查看历史更新内容</summary>
-
-暂无历史更新内容
 
 </details>
