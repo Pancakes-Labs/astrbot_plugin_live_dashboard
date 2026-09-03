@@ -143,7 +143,7 @@ def render_health_message(
     shown = 0
     for device_id, device_records in by_device.items():
         if shown >= max_records:
-            lines.append(f"  … 还有更多数据未展示（上限 {max_records} 条）")
+            lines.append(f"  … 还有更多数据未展示（上限 {max_records} 个指标项）")
             break
 
         # 规整设备名：health-data 响应不含 device_name，
@@ -163,7 +163,7 @@ def render_health_message(
 
         for type_name, type_records in by_type.items():
             if shown >= max_records:
-                lines.append(f"  … 还有更多数据未展示（上限 {max_records} 条）")
+                lines.append(f"  … 还有更多数据未展示（上限 {max_records} 个指标项）")
                 break
 
             label = _TYPE_LABELS.get(type_name, type_name)

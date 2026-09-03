@@ -108,7 +108,7 @@ def is_nsfw(app_id: str, window_title: str) -> bool:
     """判断应用 ID 与标题组合是否命中 NSFW 黑名单。
 
     Args:
-        app_id: 上游上报的 app_id（如包名 / 进程名）。
+        app_id: 上游上报的 app_id（如包名 / 进程名 / 应用名）。
         window_title: 原始窗口标题（读侧场景可用 display_title 近似）。
     """
     lower_app_id = (app_id or "").strip().lower()
@@ -117,16 +117,20 @@ def is_nsfw(app_id: str, window_title: str) -> bool:
     if lower_app_id in _BLOCKED_APP_IDS:
         return True
 
-    # 域名匹配：支持剥 www./m. 前缀，且命中黑名单域名的子域名。
-    for domain in _extract_domains(lower_title):
-        if domain in _BLOCKED_DOMAINS:
-            return True
-        if any(domain.endswith(f".{blocked}") for blocked in _BLOCKED_DOMAINS):
-            return True
+    # 域名匹配：同时对 app_id 与 title 检查，支持剥 www./m. 前缀，且命中黑名单域名的子域名。
+    for text in (lower_app_id, lower_title):
+        if not text:
+            continue
+        for domain in _extract_domains(text):
+            if domain in _BLOCKED_DOMAINS:
+                return True
+            if any(domain.endswith(f".{blocked}") for blocked in _BLOCKED_DOMAINS):
+                return True
 
-    # 关键词子串匹配。
-    if any(keyword in lower_title for keyword in _BLOCKED_KEYWORDS):
-        return True
+    # 关键词子串匹配：同时覆盖 app_id 与 title。
+    for keyword in _BLOCKED_KEYWORDS:
+        if keyword in lower_app_id or keyword in lower_title:
+            return True
 
     return False
 

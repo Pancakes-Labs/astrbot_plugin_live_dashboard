@@ -49,7 +49,19 @@ def render_timeline_message(
         else []
     )
     summary_raw = timeline_data.get("summary", {})
-    summary = summary_raw if isinstance(summary_raw, dict) else {}
+    # 归一化并防御性校验 summary 结构
+    summary: dict[str, dict[str, int]] = {}
+    if isinstance(summary_raw, dict):
+        for raw_dev_id, raw_app_map in summary_raw.items():
+            if isinstance(raw_app_map, dict):
+                normalized_app_map: dict[str, int] = {}
+                for app_k, dur_v in raw_app_map.items():
+                    try:
+                        dur_num = int(float(dur_v))
+                    except (TypeError, ValueError):
+                        dur_num = 0
+                    normalized_app_map[str(app_k)] = max(0, dur_num)
+                summary[str(raw_dev_id)] = normalized_app_map
 
     # summary 的键是 device_id，而 segments 里带有友好 device_name。
     # 建立映射后汇总区展示设备名而非原始 id。
@@ -103,8 +115,9 @@ def render_timeline_message(
                 else "各应用累计时长："
             )
             lines.append(title)
+            first_summary_map = next(iter(summary.values())) if summary else {}
             app_items = sorted(
-                next(iter(summary.values())).items(),
+                first_summary_map.items(),
                 key=lambda kv: kv[1],
                 reverse=True,
             )
