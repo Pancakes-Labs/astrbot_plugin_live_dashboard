@@ -27,7 +27,7 @@ import aiohttp
 from astrbot.api import logger
 from astrbot.api.star import StarTools
 
-from ..utils.config_parser import lookup_config_value
+from ..utils.config_parser import get_bool_value, lookup_config_value
 from ..utils.version import get_astrbot_version_info
 
 
@@ -82,10 +82,15 @@ class TelemetryManager:
         self._astrbot_version = self._astrbot_version_info.version
 
         # 从配置中读取遥测开关（兼容嵌套与扁平配置）
-        _, telemetry_val = lookup_config_value(self._config, "telemetry_config.enabled")
-        if telemetry_val is None:
-            _, telemetry_val = lookup_config_value(self._config, "telemetry_enabled")
-        self._enabled = True if telemetry_val is None else bool(telemetry_val)
+        found, _ = lookup_config_value(self._config, "telemetry_config.enabled")
+        if found:
+            self._enabled = get_bool_value(
+                self._config, "telemetry_config.enabled", default=True
+            )
+        else:
+            self._enabled = get_bool_value(
+                self._config, "telemetry_enabled", default=True
+            )
 
         # 获取或创建持久化实例 ID
         self._instance_id = self._get_or_create_instance_id()
@@ -115,6 +120,9 @@ class TelemetryManager:
 
         # 关闭状态标志
         self._closed = False
+
+        # 保留后台异步任务强引用，避免被 Python GC 意外回收
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         if self._enabled:
             logger.debug(
@@ -228,7 +236,9 @@ class TelemetryManager:
             should_flush = len(self._queue) >= 50
 
         if should_flush:
-            asyncio.create_task(self.flush())
+            flush_task = asyncio.create_task(self.flush())
+            self._background_tasks.add(flush_task)
+            flush_task.add_done_callback(self._background_tasks.discard)
 
         return True
 
@@ -431,8 +441,9 @@ class TelemetryManager:
         if not isinstance(node, dict):
             return
 
-        # 彻底移除黑名单与敏感配置项
+        # 彻底移除黑名单与敏感配置项（含用户自建服务地址）
         sensitive_keys = {
+            "base_url",
             "auth_token",
             "group_blacklist_sessions",
             "user_blacklist_senders",
@@ -564,6 +575,13 @@ class TelemetryManager:
             except asyncio.CancelledError:
                 pass
             self._send_task = None
+
+        if self._background_tasks:
+            pending = list(self._background_tasks)
+            for t in pending:
+                if not t.done():
+                    t.cancel()
+            self._background_tasks.clear()
 
         try:
             await self.flush(bypass_rate_limit=True, _allow_after_close=True)
