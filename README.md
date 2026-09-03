@@ -779,8 +779,8 @@ flowchart TB
 
     %% ===== 入口层 =====
     subgraph E[插件入口层 · main.py]
-      E1[命令入口<br/>状态 / 时间线 / 健康 / 好友 / 服务状态]
-      E2[LLM 工具入口<br/>status / timeline / health / friend]
+      E1["命令入口<br/>状态 / 时间线 / 健康 / 好友 / 服务状态"]
+      E2["LLM 工具入口<br/>status / timeline / health / friend"]
       E3[功能开关校验]
       E4[黑白名单拦截]
       E5[调用服务层]
@@ -805,11 +805,11 @@ flowchart TB
 
     %% ===== 上游服务 =====
     subgraph UP[上游 Live Dashboard 服务]
-      UP1[/api/current 实时状态]
-      UP2[/api/timeline 时间线]
-      UP3[/api/health-data 健康数据]
-      UP4[/api/health 健康检查]
-      UP5[/api/config + /api/proxy 好友聚合]
+      UP1["/api/current 实时状态"]
+      UP2["/api/timeline 时间线"]
+      UP3["/api/health-data 健康数据"]
+      UP4["/api/health 健康检查"]
+      UP5["/api/config + /api/proxy 好友聚合"]
     end
 
     %% ===== 渲染层 =====
@@ -817,7 +817,7 @@ flowchart TB
       R1[实时状态渲染 message_renderer]
       R2[时间线渲染 timeline_renderer]
       R3[健康数据渲染 health_renderer]
-      R4[脱敏 / NSFW 兜底 / 截断]
+      R4["脱敏 / NSFW 兜底 / 截断"]
     end
 
     %% ===== 工具层 =====
