@@ -1,7 +1,30 @@
 name: astrbot_plugin_live_dashboard
 display_name: 视奸面板
-desc: 一个为 AstrBot 设计的「视奸面板」插件，用于对接上游 Live Dashboard 服务。支持在私聊/群聊中通过指令快速查询当前手机、电脑的活动状态信息。还支持用自然语言让 LLM 自主查询，让 Bot 和群友都能随时随地视奸你！❤️
-version: v1.0.0
-author: DBJD-CR & GPT
-repo: https://github.com/DBJD-CR/astrbot_plugin_live_dashboard
+desc: 一个为 AstrBot 设计的「视奸面板」插件，用于对接上游 Live Dashboard 服务。支持通过指令快速查询当前或历史的手机、电脑的活动状态信息。还支持用自然语言让 LLM 自主查询，让 Bot 和群友都能随时随地视奸你！❤️
+version: v2.3.0
+author: DBJD-CR
+repo: https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard
 astrbot_version: ">=4.11.2"
+support_platforms:
+  - aiocqhttp
+  - qq_official
+  - telegram
+  - wecom
+  - lark
+  - dingtalk
+  - discord
+  - slack
+  - kook
+  - vocechat
+  - weixin_official_account
+  - satori
+  - misskey
+  - line
+social_link: https://github.com/DBJD-CR
+tags:
+  - 视奸
+  - 状态查询
+  - 设备信息
+  - 面板
+  - Live DashBoard
+  - 娱乐

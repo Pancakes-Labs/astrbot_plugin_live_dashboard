@@ -1,6 +1,15 @@
+"""实时状态消息渲染层。
+
+职责：
+- 消费上游 /api/current 的权威字段（status_text / display_title / extra），
+  产出可直接发送的文本。
+- 状态文案以服务端 status_text 为准；display_title 已由服务端按隐私分级净化，
+  仅做占位值归一与长度保护，不再本地复刻任何应用名→文案逻辑。
+- 读侧 NSFW 兜底：对服务端可能残留的敏感标题在执行隐私打码后再补一道过滤。
+"""
+
 from __future__ import annotations
 
-import re
 from typing import Any
 
 # 日志对象：用于记录渲染链路的调试信息（主要使用 DEBUG）。
@@ -13,26 +22,37 @@ from ..utils.config_parser import (
     get_text_value,
     parse_list_config,
 )
+from ..utils.nsfw_filter import is_nsfw
+from ..utils.text_utils import NSFW_MASK_TEXT, clean_text, mask_sensitive_text
+from ..utils.time_formatter import format_relative_time, format_time_text
 
-# 时间格式化工具：把 ISO 时间转换为本地可读格式。
-from ..utils.time_formatter import format_time_text
-from .app_descriptions import (
-    APP_DESCRIPTIONS_LOWER,
-    APP_PLACEHOLDER_VALUES,
-    DEFAULT_DESCRIPTION,
-    DISPLAY_TITLE_PLACEHOLDER_VALUES,
-    MUSIC_APP_NAMES,
-    TITLE_TEMPLATES_LOWER,
+# 服务端上常见的占位标题（与上游回写行为对齐，非本地复刻映射）。
+_DISPLAY_TITLE_PLACEHOLDER_VALUES = frozenset(
+    {
+        "",
+        "unknown",
+        "android",
+        "windows",
+        "macos",
+        "linux",
+        "null",
+        "none",
+    }
 )
+
+# 常见消息平台（作为 app_id 上交时属于占位，不展示成应用名）。
+_PLATFORM_APP_NAME_VALUES = frozenset(
+    {"android", "windows", "macos", "linux", "ios", "iphone", "ipad"}
+)
+
+# display_title 超长时截断，避免单行刷屏。
+_MAX_TITLE_LENGTH = 120
 
 
 def _is_online(device_item: dict[str, Any]) -> bool:
     """判断设备是否在线。
 
-    兼容场景：
-    - bool: True / False
-    - int: 1 / 0
-    - str: "1" / "true" / "True"
+    兼容上游返回的数值（1/0）与通用布尔形态。
     """
     value = device_item.get("is_online", 0)
 
@@ -50,43 +70,24 @@ def _is_online(device_item: dict[str, Any]) -> bool:
     return False
 
 
-def _clean_text(value: Any) -> str:
-    """安全转字符串并去除首尾空白。"""
-    if value is None:
-        return ""
-    return str(value).strip()
+def _friendly_app_name(app_name: str) -> str:
+    """应用名展示值：空值 / 平台占位统一为「未识别应用」。"""
+    name = app_name.strip()
+    if not name or name.lower() in _PLATFORM_APP_NAME_VALUES:
+        return "未识别应用"
+    return name
 
 
-def _is_app_placeholder(app_name: str) -> bool:
-    """判断 app_name 是否为占位值。"""
-    return app_name.strip().lower() in APP_PLACEHOLDER_VALUES
-
-
-def _normalize_display_title(display_title: str, app_name: str) -> str:
-    """清理 display_title 占位值与重复值。"""
+def _normalize_display_title(display_title: str) -> str:
+    """轻量归一 display_title：去占位值并截断超长标题。"""
     title = display_title.strip()
     if not title:
         return ""
-
-    lower_title = title.lower()
-    if lower_title in DISPLAY_TITLE_PLACEHOLDER_VALUES:
+    if title.lower() in _DISPLAY_TITLE_PLACEHOLDER_VALUES:
         return ""
-
-    app_clean = app_name.strip()
-    if app_clean and lower_title == app_clean.lower():
-        return ""
-
+    if len(title) > _MAX_TITLE_LENGTH:
+        title = title[: _MAX_TITLE_LENGTH - 1].rstrip() + "…"
     return title
-
-
-def _friendly_app_name(app_name: str) -> str:
-    """用于“应用：”字段的友好展示值。"""
-    name = app_name.strip()
-    if not name:
-        return "未识别应用"
-    if _is_app_placeholder(name):
-        return "未识别应用"
-    return name
 
 
 def _format_battery(extra_data: dict[str, Any]) -> str:
@@ -94,202 +95,53 @@ def _format_battery(extra_data: dict[str, Any]) -> str:
     battery_percent = extra_data.get("battery_percent")
     battery_charging = extra_data.get("battery_charging")
 
-    # 无有效电量数值时返回默认说明，保证字段稳定。
     if not isinstance(battery_percent, (int, float)):
         return "未知"
 
-    # 电量百分比统一取整展示。
     percent_text = f"{round(float(battery_percent))}%"
-
-    # 若上报了充电状态，则附加“充电中/未充电”。
     if isinstance(battery_charging, bool):
         return f"{percent_text} {'⚡充电中' if battery_charging else '未充电'}"
-
     return percent_text
 
 
-def _extract_music(extra_data: dict[str, Any]) -> dict[str, str]:
-    """抽取并规整音乐信息。"""
+def _format_music(extra_data: dict[str, Any]) -> str:
+    """格式化音乐信息文本（来自服务端 extra.music）。"""
     music_data = extra_data.get("music")
     if not isinstance(music_data, dict):
-        return {}
-
-    return {
-        "title": _clean_text(music_data.get("title")),
-        "artist": _clean_text(music_data.get("artist")),
-        "app": _clean_text(music_data.get("app")),
-    }
-
-
-def _format_music(extra_data: dict[str, Any]) -> str:
-    """格式化音乐信息文本。"""
-    music_data = _extract_music(extra_data)
-    title_text = music_data.get("title", "")
-    artist_text = music_data.get("artist", "")
-    app_text = music_data.get("app", "")
-
-    # 三项都为空则返回默认说明，保证字段稳定。
-    if not any([title_text, artist_text, app_text]):
         return "暂无播放"
 
-    # 优先组合为“歌手 - 歌名”。
-    core_text = ""
+    title_text = clean_text(music_data.get("title"))
+    artist_text = clean_text(music_data.get("artist"))
+    app_text = clean_text(music_data.get("app"))
+
+    if not any((title_text, artist_text, app_text)):
+        return "暂无播放"
+
     if title_text and artist_text:
         core_text = f"{artist_text} - {title_text}"
     else:
-        core_text = title_text or artist_text or ""
+        core_text = title_text or artist_text
 
-    # 若包含播放器名，按“核心文本 (播放器)”展示。
     if app_text:
-        if core_text:
-            return f"{core_text} ({app_text})"
-        return app_text
-
-    return core_text
+        return f"{core_text} ({app_text})" if core_text else app_text
+    return core_text or "暂无播放"
 
 
-def _steam_title_to_description(display_title: str) -> str:
-    """复刻上游 Steam 模板的特殊判断逻辑。"""
-    title_lower = display_title.lower()
-
-    if title_lower in {"steam", ""}:
-        return "正在浏览 Steam 喵~"
-    if title_lower == "好友列表":
-        return "正在与 Steam 好友聊天喵~"
-    if re.match(r"^[0-9a-f]{20,}$", display_title, flags=re.IGNORECASE):
-        return "正在浏览 Steam 喵~"
-    if (
-        len(display_title) <= 20
-        and " " not in display_title
-        and not re.search(r"[a-z]{3,}", display_title, flags=re.IGNORECASE)
-    ):
-        return "正在与 Steam 好友聊天喵~"
-
-    return f"正在Steam玩「{display_title}」喵~"
+def _format_server_time(server_time: Any) -> str:
+    """格式化服务端时间字段。"""
+    if isinstance(server_time, str) and server_time.strip():
+        return format_time_text(server_time)
+    return ""
 
 
-def _build_activity_description(
-    app_name: str, display_title: str, extra_data: dict[str, Any]
-) -> str:
-    """复刻上游 getAppDescription 核心逻辑（Python 版）。"""
-    cleaned_app = app_name.strip()
-    cleaned_title = _normalize_display_title(display_title, cleaned_app)
-
-    if not cleaned_app:
-        return DEFAULT_DESCRIPTION
-
-    app_lower = cleaned_app.lower()
-
-    if app_lower == "idle":
-        return "暂时离开了喵~"
-
-    music_data = _extract_music(extra_data)
-    is_music_app_foreground = app_lower in MUSIC_APP_NAMES
-
-    base_text = ""
-
-    # 若有 display_title，优先使用模板；但音乐应用且有 music.title 时跳过模板，避免与 ♪ 信息重复。
-    if cleaned_title and not (is_music_app_foreground and music_data.get("title")):
-        if app_lower == "steam":
-            base_text = _steam_title_to_description(cleaned_title)
-        else:
-            template = TITLE_TEMPLATES_LOWER.get(app_lower)
-            if template:
-                base_text = template.format(title=cleaned_title)
-
-    # 未命中模板时走描述映射。
-    if not base_text:
-        mapped = APP_DESCRIPTIONS_LOWER.get(app_lower)
-        if mapped:
-            base_text = mapped
-
-    # 最终兜底：有标题显示标题，否则默认文案。
-    if not base_text:
-        if cleaned_title:
-            base_text = f"正在玩「{cleaned_title}」喵~"
-        else:
-            base_text = DEFAULT_DESCRIPTION
-
-    return base_text
-
-
-def _parse_keyword_list(raw_text: str) -> list[str]:
-    """解析关键词列表（支持逗号/分号/换行分隔）。"""
-    return parse_list_config(raw_text, to_lower=True)
-
-
-def _build_device_search_text(device_item: dict[str, Any]) -> str:
-    """构建设备关键词匹配文本（仅 device_name，统一小写）。"""
-    return _clean_text(device_item.get("device_name")).lower()
-
-
-def _match_device_keywords(device_item: dict[str, Any], keywords: list[str]) -> bool:
-    """关键词命中判断：任意关键词为子串即命中。"""
-    if not keywords:
-        return False
-
-    haystack = _build_device_search_text(device_item)
-    if not haystack:
-        return False
-
-    return any(keyword in haystack for keyword in keywords)
-
-
-def _contains_keyword(text: str, keywords: list[str]) -> bool:
-    """判断文本是否命中任意关键词（大小写不敏感、子串匹配）。"""
-    if not text or not keywords:
-        return False
-
-    haystack = text.lower()
-    return any(keyword in haystack for keyword in keywords)
-
-
-def _mask_sensitive_text(text: str, keywords: list[str], replacement: str) -> str:
-    """对命中敏感关键词的文本执行替换。"""
-    if _contains_keyword(text, keywords):
-        return replacement
-    return text
-
-
-def _apply_device_keyword_filters_with_keywords(
-    device_items: list[dict[str, Any]],
-    whitelist_keywords: list[str],
-    blacklist_keywords: list[str],
-) -> list[dict[str, Any]]:
-    """按已解析关键词对白名单/黑名单进行设备筛选。"""
-    filtered_items = device_items
-
-    # 白名单：仅保留命中关键词的设备。
-    if whitelist_keywords:
-        filtered_items = [
-            item
-            for item in filtered_items
-            if _match_device_keywords(item, whitelist_keywords)
-        ]
-
-    # 黑名单：移除命中关键词的设备（优先级高于白名单）。
-    if blacklist_keywords:
-        filtered_items = [
-            item
-            for item in filtered_items
-            if not _match_device_keywords(item, blacklist_keywords)
-        ]
-
-    logger.debug(
-        "[视奸面板] 关键词筛选：白名单数：%s, 黑名单数：%s, 筛选前：%s, 筛选后：%s",
-        len(whitelist_keywords),
-        len(blacklist_keywords),
-        len(device_items),
-        len(filtered_items),
-    )
-
-    return filtered_items
-
-
-def _select_devices_for_render(
+def select_devices_for_render(
     payload_data: dict[str, Any], config: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """统一产出渲染所需设备列表与在线/总数统计。"""
+    """按配置筛选并排序设备，返回 (展示列表, 在线数, 总数)。
+
+    - 总数 / 在线数基于筛选后的设备集合计算，与展示设备数区分。
+    - 白名单 / 黑名单仅匹配 device_name，黑名单优先级更高。
+    """
     all_devices_raw = payload_data.get("devices", [])
     all_devices = (
         [item for item in all_devices_raw if isinstance(item, dict)]
@@ -297,32 +149,48 @@ def _select_devices_for_render(
         else []
     )
 
-    whitelist_keywords = _parse_keyword_list(
-        get_text_value(config, "device_whitelist_keywords", "")
+    whitelist_keywords = parse_list_config(
+        get_text_value(config, "device_whitelist_keywords", ""), to_lower=True
     )
-    blacklist_keywords = _parse_keyword_list(
-        get_text_value(config, "device_blacklist_keywords", "")
+    blacklist_keywords = parse_list_config(
+        get_text_value(config, "device_blacklist_keywords", ""), to_lower=True
     )
 
-    counted_devices = _apply_device_keyword_filters_with_keywords(
-        all_devices,
-        whitelist_keywords,
-        blacklist_keywords,
-    )
-    total_count = len(counted_devices)
-    online_count = sum(1 for item in counted_devices if _is_online(item))
+    counted = all_devices
+    if whitelist_keywords:
+        counted = [
+            item
+            for item in counted
+            if any(
+                k in clean_text(item.get("device_name")).lower()
+                for k in whitelist_keywords
+            )
+        ]
+    if blacklist_keywords:
+        counted = [
+            item
+            for item in counted
+            if not any(
+                k in clean_text(item.get("device_name")).lower()
+                for k in blacklist_keywords
+            )
+        ]
+
+    total_count = len(counted)
+    online_count = sum(1 for item in counted if _is_online(item))
 
     include_offline_devices = get_bool_value(config, "include_offline_devices", False)
     max_devices = get_int_value(config, "max_devices", 10, min_value=1, max_value=100)
 
-    device_items = counted_devices
+    device_items = counted
     if not include_offline_devices:
         device_items = [item for item in device_items if _is_online(item)]
 
+    # 在线优先，其次按设备名排序，保证输出顺序稳定。
     device_items.sort(
         key=lambda item: (
             0 if _is_online(item) else 1,
-            str(item.get("device_name", "")),
+            clean_text(item.get("device_name")),
         )
     )
 
@@ -332,10 +200,9 @@ def _select_devices_for_render(
 def render_dashboard_message_with_count(
     payload_data: dict[str, Any], config: dict[str, Any]
 ) -> tuple[str, int]:
-    """渲染文本并返回展示设备数，避免调用方重复计算。"""
-    device_items, online_count, total_count = _select_devices_for_render(
-        payload_data,
-        config,
+    """渲染实时状态文本并返回展示设备数，避免调用方重复计算。"""
+    device_items, online_count, total_count = select_devices_for_render(
+        payload_data, config
     )
 
     # 读取所有显示开关（由 _conf_schema.json 定义）。
@@ -347,8 +214,12 @@ def render_dashboard_message_with_count(
     show_last_seen = get_bool_value(config, "show_last_seen", True)
     show_viewer_count = get_bool_value(config, "show_viewer_count", False)
     show_server_time = get_bool_value(config, "show_server_time", False)
-    info_blacklist_keywords = _parse_keyword_list(
-        get_text_value(config, "info_blacklist_keywords", "")
+    show_recent_activities = get_bool_value(config, "show_recent_activities", False)
+    recent_activities_max = get_int_value(
+        config, "recent_activities_max", 5, min_value=1, max_value=20
+    )
+    info_blacklist_keywords = parse_list_config(
+        get_text_value(config, "info_blacklist_keywords", ""), to_lower=True
     )
     info_blacklist_replacement = (
         get_text_value(
@@ -357,19 +228,16 @@ def render_dashboard_message_with_count(
         or "不想让你看到我在干什么喵~"
     )
 
-    # 初始化输出文本行。
     lines: list[str] = [
         "📊 Live Dashboard 状态面板",
         f"在线设备：{online_count}/{total_count}",
     ]
 
-    # 调试日志：输出本次渲染基础统计与关键开关状态。
     logger.debug(
-        "[视奸面板] 开始渲染消息，设备总数：%s, 在线数：%s, 显示平台：%s, 显示标题：%s",
+        "[视奸面板] 开始渲染消息，设备总数：%s, 在线数：%s, 展示数：%s",
         total_count,
         online_count,
-        show_platform,
-        show_display_title,
+        len(device_items),
     )
 
     # 可选展示访客数。
@@ -380,32 +248,26 @@ def render_dashboard_message_with_count(
 
     # 可选展示服务端时间。
     if show_server_time:
-        server_time = payload_data.get("server_time")
-        if isinstance(server_time, str) and server_time.strip():
-            lines.append(f"服务端时间：{format_time_text(server_time)}")
+        server_time_text = _format_server_time(payload_data.get("server_time"))
+        if server_time_text:
+            lines.append(f"服务端时间：{server_time_text}")
 
-    logger.debug("[视奸面板] 正在渲染设备列表...选中设备数：%s", len(device_items))
-
-    # 没有可展示设备时返回简短提示。
     if not device_items:
         lines.append("")
         lines.append("暂无符合条件的设备状态喵。")
         return "\n".join(lines), 0
 
-    # 设备区块与头部之间插入空行，提升可读性。
     lines.append("")
 
     # 逐台设备渲染。
     for device_item in device_items:
-        # 设备基础信息。
-        device_name = _clean_text(device_item.get("device_name")) or "未知设备"
-        platform_text = _clean_text(device_item.get("platform")) or "unknown"
-        app_name_raw = _clean_text(device_item.get("app_name"))
-        display_title_raw = _clean_text(device_item.get("display_title"))
+        device_name = clean_text(device_item.get("device_name")) or "未知设备"
+        platform_text = clean_text(device_item.get("platform")) or "unknown"
         status_online = _is_online(device_item)
         status_text = "在线" if status_online else "离线"
 
-        # extra 字段容错处理。
+        app_name_raw = clean_text(device_item.get("app_name"))
+        display_title_raw = clean_text(device_item.get("display_title"))
         extra_data = device_item.get("extra", {})
         if not isinstance(extra_data, dict):
             extra_data = {}
@@ -416,14 +278,14 @@ def render_dashboard_message_with_count(
             head_text += f" ({platform_text})"
         lines.append(head_text)
 
-        # 主叙事句：现在正在…（同样应用信息黑名单脱敏策略）。
+        # 主叙事句：优先服务端 status_text，缺失时兜底。
         if status_online:
-            activity_text = _build_activity_description(
-                app_name_raw, display_title_raw, extra_data
-            )
+            status_text_value = clean_text(device_item.get("status_text"))
+            activity_text = status_text_value or "正在忙别的喵~"
         else:
             activity_text = "离线休息中喵~"
-        activity_text = _mask_sensitive_text(
+
+        activity_text = mask_sensitive_text(
             activity_text,
             info_blacklist_keywords,
             info_blacklist_replacement,
@@ -433,34 +295,53 @@ def render_dashboard_message_with_count(
         # 应用名（可选）：命中信息黑名单关键词时替换为统一文案。
         if show_app_name:
             app_name_text = _friendly_app_name(app_name_raw)
-            app_name_text = _mask_sensitive_text(
+            app_name_text = mask_sensitive_text(
                 app_name_text,
                 info_blacklist_keywords,
                 info_blacklist_replacement,
             )
             lines.append(f"  应用：{app_name_text}")
 
-        # display_title（可选）：命中信息黑名单关键词时替换为统一文案。
+        # display_title（可选）：服务端已按隐私分级净化，仅做占位/长度归一。
         if show_display_title:
-            normalized_title = _normalize_display_title(display_title_raw, app_name_raw)
-            title_text = normalized_title or "（无可展示标题）"
-            if normalized_title:
-                title_text = _mask_sensitive_text(
-                    normalized_title,
-                    info_blacklist_keywords,
-                    info_blacklist_replacement,
-                )
-            lines.append(f"  标题：{title_text}")
+            normalized_title = _normalize_display_title(display_title_raw)
+            # 与上游前端对齐的去重：
+            # - display_title 包含正在播放的歌名（音乐行已展示）时不再重复展示；
+            # - display_title 与应用名一字不差时视为零信息。
+            music_raw = extra_data.get("music")
+            music_title_text = (
+                clean_text(music_raw.get("title"))
+                if isinstance(music_raw, dict)
+                else ""
+            )
+            title_is_redundant = (
+                bool(music_title_text)
+                and music_title_text.lower() in normalized_title.lower()
+            ) or (
+                bool(app_name_raw) and normalized_title.lower() == app_name_raw.lower()
+            )
+            if not normalized_title or title_is_redundant:
+                lines.append("  标题：（无可展示标题）")
+            else:
+                # 读侧 NSFW 兜底：命中黑名单则整体打码。
+                if is_nsfw(app_name_raw, normalized_title):
+                    lines.append(f"  标题：{NSFW_MASK_TEXT}")
+                else:
+                    masked = mask_sensitive_text(
+                        normalized_title,
+                        info_blacklist_keywords,
+                        info_blacklist_replacement,
+                    )
+                    lines.append(f"  标题：{masked or '（无可展示标题）'}")
 
-        # 电量（可选）。
-        if show_battery:
-            battery_text = _format_battery(extra_data)
-            lines.append(f"  🔋 电量：{battery_text}")
+        # 电量（可选）：仅在线设备展示。离线时 extra 是最后上报的残留值，
+        # 展示易误导（与上游仅在线设备展示电量的行为对齐）。
+        if show_battery and status_online:
+            lines.append(f"  🔋 电量：{_format_battery(extra_data)}")
 
-        # 音乐（可选）。
-        if show_music:
-            music_text = _format_music(extra_data)
-            lines.append(f"  🎵 音乐：{music_text}")
+        # 音乐（可选）：同上，仅在线设备展示。
+        if show_music and status_online:
+            lines.append(f"  🎵 音乐：{_format_music(extra_data)}")
 
         # 最后上报时间（可选）。
         if show_last_seen:
@@ -473,11 +354,86 @@ def render_dashboard_message_with_count(
         # 每台设备之间留一个空行。
         lines.append("")
 
+    # 可选：展示最近活动（recent_activities 由上游按 started_at 倒序返回）。
+    if show_recent_activities:
+        recent_raw = payload_data.get("recent_activities", [])
+        recent_items = (
+            [r for r in recent_raw if isinstance(r, dict)]
+            if isinstance(recent_raw, list)
+            else []
+        )
+        if recent_items:
+            # 设备列表尾部已留有尾随空行，仅当上一行非空时才补空行（修复多余换行）。
+            if lines and lines[-1].strip():
+                lines.append("")
+
+            # 方案A：设备信息上浮。单设备时上浮到区块标题；多设备时按设备分组，
+            # 仅在设备切换处重新标注设备名，避免每行重复超长设备字符串。
+            recent_slice = recent_items[:recent_activities_max]
+            device_names: list[str] = []
+            for _activity in recent_slice:
+                _device = clean_text(_activity.get("device_name"))
+                if _device and _device not in device_names:
+                    device_names.append(_device)
+            single_device = len(device_names) == 1
+
+            if single_device:
+                lines.append(f"最近活动（{device_names[0]}）：")
+            else:
+                lines.append("最近活动：")
+
+            current_device: str | None = None
+            for index, activity in enumerate(recent_slice):
+                activity_app_raw = clean_text(activity.get("app_name"))
+                activity_app = _friendly_app_name(activity_app_raw)
+                activity_status = clean_text(activity.get("status_text"))
+                activity_title = _normalize_display_title(
+                    clean_text(activity.get("display_title"))
+                )
+                activity_device = clean_text(activity.get("device_name"))
+                activity_time_raw = activity.get("started_at")
+                activity_time = (
+                    format_relative_time(activity_time_raw)
+                    if isinstance(activity_time_raw, str) and activity_time_raw.strip()
+                    else ""
+                )
+                main_text = activity_status or activity_app or "未知活动"
+                main_text = mask_sensitive_text(
+                    main_text,
+                    info_blacklist_keywords,
+                    info_blacklist_replacement,
+                )
+                # 与设备标题行一致的读侧 NSFW 兜底，避免活动标题泄漏敏感内容。
+                detail_text = ""
+                if activity_title:
+                    if is_nsfw(activity_app_raw, activity_title):
+                        detail_text = f"「{NSFW_MASK_TEXT}」"
+                    else:
+                        detail_text = f"「{mask_sensitive_text(activity_title, info_blacklist_keywords, info_blacklist_replacement)}」"
+
+                # 多设备时：仅在设备切换处插入分组头，设备组之间用空行隔开。
+                if not single_device and activity_device != current_device:
+                    current_device = activity_device
+                    if lines and lines[-1].strip():
+                        lines.append("")
+                    if activity_device:
+                        lines.append(f"  📱 {activity_device}")
+
+                time_prefix = f"{activity_time} " if activity_time else ""
+                lines.append(f"  {index + 1}. {time_prefix}{main_text}{detail_text}")
+
     # 去除尾部多余空行，保证回复结尾干净。
     while lines and not lines[-1].strip():
         lines.pop()
 
-    # 合并文本并记录长度（DEBUG）。
     rendered = "\n".join(lines)
     logger.debug("[视奸面板] 渲染完成，回复字符数：%s", len(rendered))
     return rendered, len(device_items)
+
+
+__all__ = [
+    "render_dashboard_message_with_count",
+    "select_devices_for_render",
+    "_is_online",
+    "clean_text",
+]

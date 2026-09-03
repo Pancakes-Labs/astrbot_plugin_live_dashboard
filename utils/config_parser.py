@@ -3,15 +3,53 @@ from __future__ import annotations
 from typing import Any
 
 
+def lookup_config_value(config: dict[str, Any], key: str) -> tuple[bool, Any]:
+    """按兼容策略查找配置值，适配扁平旧键与嵌套分组两种形态。
+
+    查找优先级（自底向上）：
+    1. 点号路径：connection.base_url 精确访问嵌套分组；
+    2. 顶层扁平键：旧版 _conf_schema.json 直接保存的键；
+    3. 分组内搜索：在顶层 object 分组（手风琴容器）的 items 中查找同名键。
+
+    Returns:
+        (是否找到, 值)。未找到时第二个元素恒为 None。
+    """
+    # 1) 点号路径：按 "a.b.c" 逐层下沉。
+    parts = [part for part in key.split(".") if part]
+    if len(parts) > 1:
+        node: Any = config
+        for part in parts:
+            if isinstance(node, dict) and part in node:
+                node = node[part]
+            else:
+                break
+        else:
+            return True, node
+
+    # 2) 顶层扁平键（旧版配置文件形态，或 AstrBot 迁移后残留）。
+    if key in config:
+        return True, config[key]
+
+    # 3) 顶层 object 分组内搜索（新版手风琴容器 items）。
+    for group_value in config.values():
+        if isinstance(group_value, dict) and key in group_value:
+            return True, group_value[key]
+
+    return False, None
+
+
 def get_text_value(config: dict[str, Any], key: str, default: str = "") -> str:
     """读取字符串配置并去除首尾空白。
 
     设计目的：
-    - 统一处理配置项中的 `None`、数字、布尔等非字符串输入。
-    - 避免调用方重复写 `str(...).strip()` 的样板代码。
+    - 统一处理配置项中的 None、数字、布尔等非字符串输入。
+    - 避免调用方重复写 str(...).strip() 的样板代码。
+    - 兼容 _conf_schema.json 的扁平旧键与嵌套分组（手风琴）两种形态。
     """
     # 从配置中读取目标键，缺失时使用默认值。
-    value = config.get(key, default)
+    found, value = lookup_config_value(config, key)
+    if not found:
+        value = default
 
     # 对 None 做特殊处理：保持默认值语义，避免把 None 转成字符串 "None"。
     if value is None:
@@ -26,9 +64,13 @@ def get_bool_value(config: dict[str, Any], key: str, default: bool = False) -> b
 
     支持的“真值”字符串：
     - "1" / "true" / "yes" / "on"（大小写不敏感）
+
+    兼容 _conf_schema.json 的扁平旧键与嵌套分组两种形态。
     """
-    # 读取原始值。
-    value = config.get(key, default)
+    # 读取原始值（扁平旧键 / 嵌套分组均可命中）。
+    found, value = lookup_config_value(config, key)
+    if not found:
+        value = default
 
     # 若本身就是 bool，直接返回。
     if isinstance(value, bool):
@@ -79,8 +121,10 @@ def get_int_value(
     - 最大展示数量
     - 各类阈值参数
     """
-    # 先取原始配置值，缺失时使用默认值。
-    value = config.get(key, default)
+    # 先取原始配置值（扁平旧键 / 嵌套分组均可命中），缺失时使用默认值。
+    found, value = lookup_config_value(config, key)
+    if not found:
+        value = default
 
     # 尝试转换为 int，失败则回退默认值。
     try:
@@ -97,3 +141,12 @@ def get_int_value(
         number = min(max_value, number)
 
     return number
+
+
+__all__ = [
+    "get_text_value",
+    "get_bool_value",
+    "get_int_value",
+    "parse_list_config",
+    "lookup_config_value",
+]
