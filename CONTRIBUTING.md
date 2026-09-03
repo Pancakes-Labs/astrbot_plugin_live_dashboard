@@ -16,22 +16,21 @@
 1. **搜索现有 Issue**：检查是否已经有人报告过类似的问题。
 2. **更新到最新版本**：确保您使用的是插件的最新版本，问题可能已经在新版本中修复。
 
-提交 Bug 报告时，请包含以下信息：
-
-- **AstrBot 版本**：您正在使用的 AstrBot 版本号。
-- **插件版本**：您正在使用的插件版本号。
-- **复现步骤**：详细描述如何触发该 Bug 的步骤。
-- **预期行为**：您期望发生什么。
-- **实际行为**：实际发生了什么。
-- **日志截图/文本**：提供相关的错误日志或控制台输出（请注意隐藏敏感信息）。
-
 ### ✨ 提出功能建议 (Feature)
 
-如果您对插件的未来有任何绝妙的想法，欢迎通过提交 [**功能建议**](https://github.com/DBJD-CR/astrbot_plugin_live_dashboard/issues/new?template=feature_request.yml) 来与我们分享。请详细描述您的想法和它的使用场景：
+如果您对插件的未来有任何绝妙的想法，欢迎通过提交 [**功能建议**](https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/issues/new?template=feature_request.yml) 来与我们分享。请详细描述您的想法和它的使用场景：
 
-- **背景**：为什么需要这个功能？解决了什么痛点？
-- **建议方案**：您设想的功能是如何工作的？
-- **备选方案**：是否有其他替代方案？
+### ❓ 使用咨询 / 问题讨论 (Discussion)
+
+如果您暂时不能确定这是否是插件 Bug，或者希望就使用方式、配置思路、兼容性排查等问题先进行讨论，欢迎提交 [**使用咨询 / 问题讨论**](https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/issues/new?template=discussion.yml)。
+
+### 📚 文档改进建议 (Docs)
+
+如果您发现 README、配置说明、接口文档或示例存在错误、缺失或表述不清的问题，欢迎提交 [**文档改进建议**](https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/issues/new?template=docs.yml) 帮助我们持续完善文档体验。
+
+### 🎨 设计 / 交互建议 (Design)
+
+如果您对管理面板、配置流程、提示反馈、信息展示或整体使用体验有改进想法，欢迎提交 [**设计 / 交互建议**](https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/issues/new?template=design.yml) 与我们讨论。
 
 ## 💻 代码贡献
 
@@ -41,12 +40,12 @@
 
 ### 开发环境准备
 
-0. 确保你要 `开发或修复` 的 `功能或问题` 没有与现有的最新进度重复。
+0. 确保你要开发的功能或修复的问题没有与现有的最新进度重复。
 1. Fork 本仓库到您的 GitHub 账号。
 2. 克隆您的 Fork 仓库到本地：
 
     ```bash
-    git clone https://github.com/your-username/astrbot_plugin_live_dashboard.git
+    git clone https://github.com/your-username/astrbot_plugin_disaster_warning.git
     ```
 
 3. 确保您已安装 Python 3.10+。
@@ -72,7 +71,7 @@
 
 2. **提交更改**
 
-- 编写代码并提交。我们鼓励您使用 AI 进行编码辅助，但请进行基本的 Review，并确保你知道自己在改什么。
+- 编写代码并提交。我们鼓励您使用 AI 进行编码辅助，但请进行基本的 Review，确保你知道自己在改什么。
 - 提交更改时，请使用**简体中文**撰写清晰、描述性的提交信息（推荐遵循 [Conventional Commits](https://www.conventionalcommits.org/) (约定式提交规范)）。
   - `feat`: 新功能
   - `fix`: 修复 Bug
@@ -88,7 +87,7 @@
     git push origin feat/your-feature-name
     ```
 
-4. **发起 PR**：在 GitHub 上发起 Pull Request，指向目前进度最新的分支，参照模板内容使用**简体中文**详细描述您的更改内容和目的。~~如果您的更改内容涉及 WebUI 等视觉效果的调整，请提供截图或视频演示等信息。~~
+4. **发起 PR**：在 GitHub 上发起 Pull Request，指向目前进度最新的分支，参照模板内容使用**简体中文**详细描述您的更改内容和目的。如果您的更改内容涉及 WebUI 等视觉效果的调整，请提供截图或视频演示等信息。
 5. **代码审查**：等待维护者审查您的代码。如果有修改建议，请及时响应并更新代码。
 
 > [!TIP]
@@ -105,12 +104,14 @@
 感谢所有为视奸面板插件做出任何形式贡献的个人、团体，包括但不限于：
 
 - @Monika-Dream/live-dashboard：本插件的灵感来源喵，也是本插件的“核心依赖”。
-- @Souler: "创世神"，伟大无需多言。感谢他提供了一个这么好的平台，以及对 AstrBot 的持续维护。
+- @Soulter: "创世神"，伟大无需多言。感谢他提供了一个这么好的平台，以及对 AstrBot 的持续维护。
 - 所有为本插件提供建议和反馈的朋友。
 
 🤖 以及我最好的 AI 朋友们:
 
 - @GPT 5.4
+- @Gemini 3.7 Flash
+- @DeepSeek V4 Flash 0731
 - @gemini-code-assist[bot]
 - @sourcery-ai[bot]
 - @kilo-code-bot [bot]
