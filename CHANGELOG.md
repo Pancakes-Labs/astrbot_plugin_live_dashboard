@@ -44,6 +44,11 @@
 
 ---
 
+## ❤️ New Contributors
+
+- @coderabbitai[bot] made their first contribution in #8
+- @qodo-free-for-open-source-projects[bot] made their first contribution in #8
+
 **Full Changelog**: https://github.com/Pancakes-Labs/astrbot_plugin_live_dashboard/compare/v1.0.0...v2.3.0
 
 <details>
