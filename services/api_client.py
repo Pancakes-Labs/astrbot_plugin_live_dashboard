@@ -184,7 +184,11 @@ class ApiClient:
         return await self._get_json("/api/proxy", params)
 
     async def get_proxy_timeline(
-        self, dashboard_id: str, date: str, tz_offset_minutes: int
+        self,
+        dashboard_id: str,
+        date: str,
+        tz_offset_minutes: int,
+        device_id: str | None = None,
     ) -> dict[str, Any]:
         """通过只读代理拉取指定好友面板的 /api/timeline。
 
@@ -192,6 +196,7 @@ class ApiClient:
             dashboard_id: 好友面板 id。
             date: 形如 YYYY-MM-DD 的本地日期。
             tz_offset_minutes: 浏览器时区偏移（UTC+8 为 -480）。
+            device_id: 可选，仅查询指定设备。
         """
         params: dict[str, str] = {
             "dashboard_id": dashboard_id,
@@ -199,6 +204,8 @@ class ApiClient:
             "date": date,
             "tz": str(tz_offset_minutes),
         }
+        if device_id:
+            params["device_id"] = device_id
         return await self._get_json("/api/proxy", params)
 
     async def get_proxy_health_data(
@@ -245,7 +252,7 @@ def make_client_from_config(config: dict[str, Any]) -> ApiClient:
     base_url = get_text_value(config, "base_url", "")
     auth_token = get_text_value(config, "auth_token", "")
     timeout_sec = get_int_value(
-        config, "request_timeout_sec", 30, min_value=1, max_value=60
+        config, "request_timeout_sec", 30, min_value=1, max_value=600
     )
     return ApiClient(base_url=base_url, auth_token=auth_token, timeout_sec=timeout_sec)
 
