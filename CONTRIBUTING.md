@@ -45,7 +45,7 @@
 2. 克隆您的 Fork 仓库到本地：
 
     ```bash
-    git clone https://github.com/your-username/astrbot_plugin_disaster_warning.git
+    git clone https://github.com/your-username/astrbot_plugin_live_dashboard.git
     ```
 
 3. 确保您已安装 Python 3.10+。
