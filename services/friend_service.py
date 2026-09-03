@@ -16,7 +16,11 @@ from typing import Any
 from astrbot.api import logger
 
 from ..utils.config_parser import get_int_value
-from ..utils.time_formatter import get_browser_tz_offset_minutes, get_today_str
+from ..utils.time_formatter import (
+    get_browser_tz_offset_minutes,
+    get_today_str,
+    is_valid_date_str,
+)
 from .base_service import BaseService
 from .health_renderer import render_health_message
 from .message_renderer import render_dashboard_message_with_count
@@ -158,6 +162,8 @@ class FriendService(BaseService):
 
         if date is None:
             date = get_today_str()
+        elif not is_valid_date_str(date):
+            return f"日期格式不正确：{date}，应为 YYYY-MM-DD 喵。", False
 
         payload, error = await self._map_api_errors(
             "好友时间线请求",
@@ -196,6 +202,8 @@ class FriendService(BaseService):
 
         if date is None:
             date = get_today_str()
+        elif not is_valid_date_str(date):
+            return f"日期格式不正确：{date}，应为 YYYY-MM-DD 喵。", False
 
         payload, error = await self._map_api_errors(
             "好友健康数据请求",

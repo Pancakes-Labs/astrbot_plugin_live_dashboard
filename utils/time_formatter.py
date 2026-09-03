@@ -63,8 +63,14 @@ def format_relative_time(raw_text: str) -> str:
 
 
 def is_valid_date_str(value: str) -> bool:
-    """判断字符串是否为合法 YYYY-MM-DD 日期格式。"""
-    return bool(_DATE_PATTERN.match(value))
+    """判断字符串是否为合法 YYYY-MM-DD 日期格式与真实有效日期。"""
+    if not isinstance(value, str) or not _DATE_PATTERN.match(value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
 
 
 def get_today_str() -> str:
