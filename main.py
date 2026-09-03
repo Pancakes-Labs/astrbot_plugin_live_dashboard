@@ -705,7 +705,19 @@ class LiveDashboardPlugin(star.Star):
             yield event.chain_result([Plain(text=denied_text)])
             return
 
-        panel_name, subcommand, date_arg = _parse_friend_args(name)
+        # 优先从完整消息文本中提取参数，兼容框架多 token 未绑定到单一参数的情况
+        raw_input = name or ""
+        msg_str = re.sub(r"\s+", " ", (event.get_message_str() or "").strip())
+        for cmd_name in ("视奸好友", "好友面板"):
+            for prefix in (f"/{cmd_name}", cmd_name):
+                if msg_str.startswith(f"{prefix} "):
+                    raw_input = msg_str[len(prefix) :].strip()
+                    break
+                if msg_str == prefix:
+                    raw_input = ""
+                    break
+
+        panel_name, subcommand, date_arg = _parse_friend_args(raw_input)
         logger.info(
             "[视奸面板] 收到好友面板查询指令，面板：%s，子命令：%s，日期：%s，会话：%s",
             panel_name or "（全部）",
