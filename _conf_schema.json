@@ -1,109 +1,249 @@
 {
-  "base_url": {
-    "description": "Live Dashboard 服务地址",
-    "type": "string",
-    "hint": "例如 https://your-domain.com 或 http://localhost:3000。不需要填写 /api/current，插件会自动拼接。",
-    "default": ""
+  "connection": {
+    "description": "🌐 连接配置",
+    "type": "object",
+    "hint": "配置 Live Dashboard 服务的地址与请求行为。",
+    "items": {
+      "base_url": {
+        "description": "Live Dashboard 服务地址",
+        "type": "string",
+        "hint": "例如 https://your-domain.com 或 http://localhost:3000。不需要填写 /api/current，插件会自动拼接。",
+        "default": ""
+      },
+      "auth_token": {
+        "description": "可选鉴权 Token",
+        "type": "string",
+        "hint": "仅当你的服务端或反向代理要求认证时填写。会以 Authorization: Bearer <token> 形式发送。",
+        "default": "",
+        "obvious_hint": true
+      },
+      "request_timeout_sec": {
+        "description": "请求超时时间（秒）",
+        "type": "int",
+        "default": 30,
+        "hint": "",
+        "slider": {
+          "min": 5,
+          "max": 600,
+          "step": 5
+        }
+      }
+    }
   },
-  "auth_token": {
-    "description": "可选鉴权 Token",
-    "type": "string",
-    "hint": "仅当你的服务端或反向代理要求认证时填写。会以 Authorization: Bearer <token> 形式发送。",
-    "default": "",
-    "obvious_hint": true
+  "output_scope": {
+    "description": "📟 输出范围配置",
+    "type": "object",
+    "hint": "控制哪些设备进入输出、每类输出最多展示多少条。",
+    "items": {
+      "include_offline_devices": {
+        "description": "是否包含离线设备",
+        "type": "bool",
+        "default": false
+      },
+      "max_devices": {
+        "description": "最多展示设备数量",
+        "type": "int",
+        "default": 10,
+        "hint": "用于避免回复过长"
+      },
+      "device_whitelist_keywords": {
+        "description": "设备白名单关键词（命中才显示）",
+        "type": "string",
+        "default": "",
+        "hint": "支持逗号/分号/换行分隔；仅匹配设备名。"
+      },
+      "device_blacklist_keywords": {
+        "description": "设备黑名单关键词（命中则隐藏）",
+        "type": "string",
+        "default": "",
+        "hint": "支持逗号/分号/换行分隔；仅匹配设备名，黑名单优先级高于白名单。"
+      }
+    }
   },
-  "request_timeout_sec": {
-    "description": "请求超时时间（秒）",
-    "type": "int",
-    "default": 30,
-    "hint": ""
+  "access_control": {
+    "description": "🛡️ 访问控制与隐私安全",
+    "type": "object",
+    "hint": "按群/按用户/按敏感词控制查询范围，命中即不响应或替换。",
+    "items": {
+      "group_blacklist_sessions": {
+        "description": "群组黑名单",
+        "type": "string",
+        "default": "",
+        "hint": "支持逗号/分号/换行分隔；命中后该会话内不响应查询。可填写完整会话 UMO（如 default:GroupMessage:123456789），也可仅填写尾部群号。"
+      },
+      "user_blacklist_senders": {
+        "description": "用户黑名单",
+        "type": "string",
+        "default": "",
+        "hint": "支持逗号/分号/换行分隔；命中后不响应该用户查询。"
+      },
+      "info_blacklist_keywords": {
+        "description": "信息黑名单关键词（现在/应用/标题命中即替换）",
+        "type": "string",
+        "default": "",
+        "hint": "支持逗号/分号/换行分隔；用于隐藏个人姓名、私密应用等敏感词。"
+      },
+      "info_blacklist_replacement": {
+        "description": "信息黑名单替换文案",
+        "type": "string",
+        "default": "不想让你看到我在干什么喵~",
+        "hint": "当现在叙事、应用名或标题命中信息黑名单关键词时，用该文案替换。"
+      }
+    }
   },
-  "include_offline_devices": {
-    "description": "是否包含离线设备",
-    "type": "bool",
-    "default": false
+  "output_fields": {
+    "description": "🧩 输出字段开关",
+    "type": "object",
+    "hint": "控制状态面板中显示哪些信息字段，兼顾隐私与信息量。",
+    "items": {
+      "show_platform": {
+        "description": "显示设备平台（windows/macos/android）",
+        "type": "bool",
+        "default": true
+      },
+      "show_app_name": {
+        "description": "显示当前应用名",
+        "type": "bool",
+        "default": true
+      },
+      "show_display_title": {
+        "description": "显示窗口净化标题字段",
+        "type": "bool",
+        "default": true,
+        "hint": "若更重视隐私可关闭"
+      },
+      "show_battery": {
+        "description": "显示电量信息",
+        "type": "bool",
+        "default": true
+      },
+      "show_music": {
+        "description": "显示音乐信息",
+        "type": "bool",
+        "default": true
+      },
+      "show_last_seen": {
+        "description": "显示最后上报时间",
+        "type": "bool",
+        "default": true
+      },
+      "show_viewer_count": {
+        "description": "显示访客数量",
+        "type": "bool",
+        "default": false
+      },
+      "show_server_time": {
+        "description": "显示服务端时间",
+        "type": "bool",
+        "default": false
+      },
+      "show_recent_activities": {
+        "description": "显示最近活动列表",
+        "type": "bool",
+        "default": false,
+        "hint": "是否展示最近的活动状态。"
+      },
+      "recent_activities_max": {
+        "description": "最近活动状态最多展示条数",
+        "type": "int",
+        "default": 5,
+        "hint": "用于避免回复过长",
+        "slider": {
+          "min": 1,
+          "max": 20,
+          "step": 1
+        }
+      }
+    }
   },
-  "max_devices": {
-    "description": "最多展示设备数量",
-    "type": "int",
-    "default": 10,
-    "hint": "用于避免回复过长。"
+  "caching": {
+    "description": "⚡ 缓存配置",
+    "type": "object",
+    "hint": "控制插件内部数据缓存策略，降低高频查询对上游服务的压力。",
+    "items": {
+      "friend_config_cache_ttl_sec": {
+        "description": "好友面板列表缓存时长（秒）",
+        "type": "int",
+        "default": 30,
+        "hint": "设置为 0 可禁用缓存",
+        "slider": {
+          "min": 0,
+          "max": 600,
+          "step": 5
+        }
+      }
+    }
   },
-  "device_whitelist_keywords": {
-    "description": "设备白名单关键词（命中才显示）",
-    "type": "string",
-    "default": "",
-    "hint": "支持逗号/分号/换行分隔；仅匹配 device_name（设备名）。"
+  "commands": {
+    "description": "🛠️ 命令与功能开关",
+    "type": "object",
+    "hint": "统一管理各查询命令的启用状态与展示行为",
+    "items": {
+      "enable_system_status_command": {
+        "description": "启用服务状态查询",
+        "type": "bool",
+        "default": true,
+        "hint": "查询 Live Dashboard 服务连通性、运行时长与时间。"
+      },
+      "enable_timeline_command": {
+        "description": "启用时间线查询",
+        "type": "bool",
+        "default": true,
+        "hint": "查询指定日期每个应用的使用时长"
+      },
+      "timeline_max_segments": {
+        "description": "时间线最多展示片段数",
+        "type": "int",
+        "default": 40,
+        "hint": "用于避免回复过长",
+        "slider": {
+          "min": 5,
+          "max": 200,
+          "step": 5
+        }
+      },
+      "timeline_show_device_names": {
+        "description": "时间线展示设备名",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后仅保留应用名与时长"
+      },
+      "enable_health_command": {
+        "description": "启用健康数据查询",
+        "type": "bool",
+        "default": true,
+        "hint": "查询指定日期的心率/步数/睡眠等数据"
+      },
+      "health_max_records": {
+        "description": "健康数据最多展示记录数",
+        "type": "int",
+        "default": 40,
+        "hint": "用于避免回复过长",
+        "slider": {
+          "min": 5,
+          "max": 200,
+          "step": 5
+        }
+      },
+      "enable_friend_command": {
+        "description": "启用好友面板查询",
+        "type": "bool",
+        "default": true,
+        "hint": "查询聚合的好友面板状态"
+      }
+    }
   },
-  "device_blacklist_keywords": {
-    "description": "设备黑名单关键词（命中则隐藏）",
-    "type": "string",
-    "default": "",
-    "hint": "支持逗号/分号/换行分隔；仅匹配 device_name（设备名），黑名单优先级高于白名单。"
-  },
-  "group_blacklist_sessions": {
-    "description": "群组黑名单（按 session_id 匹配）",
-    "type": "string",
-    "default": "",
-    "hint": "支持逗号/分号/换行分隔；命中后该会话内不响应查询。可填写完整 session_id（如 GroupMessage:123456789），也可仅填写尾部群号。"
-  },
-  "user_blacklist_senders": {
-    "description": "用户黑名单（按 sender_id 匹配）",
-    "type": "string",
-    "default": "",
-    "hint": "支持逗号/分号/换行分隔；命中后不响应该用户查询。"
-  },
-  "info_blacklist_keywords": {
-    "description": "信息黑名单关键词（现在/应用/标题命中即替换）",
-    "type": "string",
-    "default": "",
-    "hint": "支持逗号/分号/换行分隔；用于隐藏个人姓名、私密应用等敏感词。"
-  },
-  "info_blacklist_replacement": {
-    "description": "信息黑名单替换文案",
-    "type": "string",
-    "default": "不想让你看到我在干什么喵~",
-    "hint": "当现在叙事、应用名或标题命中信息黑名单关键词时，用该文案替换。"
-  },
-  "show_platform": {
-    "description": "显示设备平台（windows/macos/android）",
-    "type": "bool",
-    "default": true
-  },
-  "show_app_name": {
-    "description": "显示当前应用名",
-    "type": "bool",
-    "default": true
-  },
-  "show_display_title": {
-    "description": "显示 display_title 字段",
-    "type": "bool",
-    "default": true,
-    "hint": "若更重视隐私可关闭。"
-  },
-  "show_battery": {
-    "description": "显示电量信息",
-    "type": "bool",
-    "default": true
-  },
-  "show_music": {
-    "description": "显示音乐信息",
-    "type": "bool",
-    "default": true
-  },
-  "show_last_seen": {
-    "description": "显示最后上报时间",
-    "type": "bool",
-    "default": true
-  },
-  "show_viewer_count": {
-    "description": "显示访客数量",
-    "type": "bool",
-    "default": false
-  },
-  "show_server_time": {
-    "description": "显示服务端时间",
-    "type": "bool",
-    "default": false
+  "telemetry_config": {
+    "description": "📊 匿名遥测配置",
+    "type": "object",
+    "hint": "用于收集插件运行状态与错误排障信息，帮助改进插件稳定性",
+    "items": {
+      "enabled": {
+        "description": "启用匿名遥测",
+        "type": "bool",
+        "default": true,
+        "hint": "启用后将发送匿名的使用统计和错误报告，帮助排障与改进插件。不收集任何设备状态、个人隐私与聊天内容"
+      }
+    }
   }
 }
